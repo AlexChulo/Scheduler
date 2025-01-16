@@ -241,6 +241,7 @@ app.get('/api/schedule/:printerId', (req, res) => {
 
         res.status(200).json(events);
     });
+
 });
 
 
