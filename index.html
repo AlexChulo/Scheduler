@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Print Job Submission</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://threejs.org/examples/js/loaders/STLLoader.js"></script>
+<script src="https://threejs.org/examples/js/loaders/OBJLoader.js"></script>
+
+</head>
+<body>
+    <div class="container mt-5">
+        <h2 class="text-center mb-4">3D Print Job Submission</h2>
+        <div class="main p-3 d-flex justify-content-center" style="align-items: center; text-align: center;">
+            <div class="upload-form">
+                <h3 class="upload-title mb-4">Upload Form</h3>
+                <form id="printForm" action="recommendations.html" method="GET">
+                    <!-- File Upload -->
+                    <div class="form-group mb-4">
+                        <label for="file">Upload STL File:</label>
+                        <input type="file" class="form-control" id="file" name="file" accept=".stl, .obj" required>
+                    </div>
+                    
+                    <!-- Subject -->
+                    <div class="form-group mb-4">
+                        <input type="text" class="form-control" id="subject" name="subject" placeholder="Onderwerp">
+                    </div>
+
+                    <!-- Private Assignment -->
+                    <div class="form-group mb-4">
+                        <label for="private">Prive opdracht?</label>
+                        <select class="form-select" id="private" name="private">
+                            <option value="" disabled selected>Choose an option</option>
+                            <option value="1">Ja</option>
+                            <option value="2">Nee</option>
+                        </select>
+                    </div>
+
+                    <!-- Discussed with Teacher -->
+                    <div class="form-group mb-4">
+                        <label for="discussed">Besproken met de docent?</label>
+                        <select class="form-select" id="discussed" name="discussed">
+                            <option value="" disabled selected>Choose an option</option>
+                            <option value="1">Ja</option>
+                            <option value="2">Nee</option>
+                        </select>
+                    </div>
+
+                    <!-- Description -->
+                    <div class="form-group mb-4">
+                        <textarea class="form-control" id="description" name="description" rows="5" placeholder="Omschrijving"></textarea>
+                    </div>
+
+                    <!-- Estimated Print Time -->
+                    <div class="form-group mb-4">
+                        <label for="time">Estimated Print Time (hours):</label>
+                        <input type="number" class="form-control" id="time" name="time" placeholder="Enter estimated time" required>
+                    </div>
+
+                    <!-- Weight -->
+                    <div class="form-group mb-4">
+                        <label for="weight">Weight (grams):</label>
+                        <input type="number" class="form-control" id="weight" name="weight" placeholder="Enter weight" required>
+                    </div>
+
+                    <!-- Dimensions -->
+                    <div class="form-group mb-4">
+                        <label for="dimensions">Dimensions (L x W x H in mm):</label>
+                        <div class="d-flex">
+                            <input type="number" id="length" name="length" class="form-control mr-2" placeholder="Length" required>
+                            <input type="number" id="width" name="width" class="form-control mr-2" placeholder="Width" required>
+                            <input type="number" id="height" name="height" class="form-control" placeholder="Height" required>
+                        </div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button type="submit" class="btn btn-primary">Submit</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function redirectToRecommendationsPage() {
+            const form = document.getElementById("printForm");
+            const formData = new FormData(form);
+            const params = new URLSearchParams();
+
+            // Add all form fields to query parameters
+            formData.forEach((value, key) => {
+                params.append(key, value);
+            });
+
+            // Redirect to recommendations.html with query string
+            window.location.href = `recommendations.html?${params.toString()}`;
+        }
+    </script>
+</body>
+</html>

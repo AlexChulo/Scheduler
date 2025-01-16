@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Printer Recommendations</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <!-- FullCalendar CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.2/main.min.css" rel="stylesheet">
+
+    <!-- FullCalendar JS -->
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.2/main.min.js"></script>
+
+</head>
+
+<body>
+    <div class="container mt-5">
+        <h2 class="text-center mb-4">Recommended Printers</h2>
+        <div id="recommendations" class="mt-5"></div>
+    </div>
+
+    <script>
+        // Function to parse query parameters from the URL
+        function getQueryParams() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return {
+                subject: urlParams.get("subject") || "",
+                weight: parseFloat(urlParams.get("weight")) || 0,
+                length: parseFloat(urlParams.get("length")) || 0,
+                width: parseFloat(urlParams.get("width")) || 0,
+                height: parseFloat(urlParams.get("height")) || 0,
+            };
+        }
+
+        // Fetch printer data from the Node.js API
+        fetch('http://localhost:3000/api/printers')
+            .then(response => response.json())
+            .then(printers => {
+                // Get user inputs from query parameters
+                const userInput = getQueryParams();
+
+                const recommendations = printers.map(printer => {
+                    let score = 0;
+
+                    // Dynamic scoring logic based on user inputs and printer data
+                    if (printer.speed === "fast") score += 2; // Example scoring for speed
+                    if (printer.speed === "normal") score += 1; // Example scoring for speed
+                    if (printer.weight_capacity >= userInput.weight) score += 2;
+                    if (
+                        printer.max_depth >= userInput.length &&
+                        printer.max_width >= userInput.width &&
+                        printer.max_height >= userInput.height
+                    ) {
+                        score += 3;
+
+                        const sizeDifference =
+                            (printer.max_depth - userInput.length) +
+                            (printer.max_width - userInput.width) +
+                            (printer.max_height - userInput.height);
+
+                        // Smaller sizeDifference means a higher bonus
+                        score += Math.max(1, 3 - sizeDifference / 100); // Scale the bonus dynamically
+                    }
+
+                    return { ...printer, score };
+                }).sort((a, b) => b.score - a.score); // Sort by score
+                if (recommendations.length > 0) {
+                    recommendations[0].isTopScorer = true;
+
+                }
+
+
+
+                displayRecommendations(recommendations, userInput);
+            })
+            .catch(error => console.error('Error fetching printers:', error));
+
+        function displayRecommendations(recommendations, userInput) {
+            const container = document.getElementById("recommendations");
+            container.innerHTML = '';
+
+            recommendations.forEach(printer => {
+                if (
+                    printer.max_depth < userInput.length,
+                    printer.max_width < userInput.width ,
+                    printer.max_height < userInput.height
+                ) {
+                    return; // Skip printing this printer, as it is too small
+                }
+                const div = document.createElement("div");
+                div.classList.add("alert", "alert-secondary");
+                const a = document.createElement("a");
+                a.href = `schedule.html?id=${printer.id}&name=${encodeURIComponent(printer.name)}&score=${printer.score}&subject=${encodeURIComponent(userInput.subject)}`;
+                a.innerHTML = `${printer.name} - Score: ${printer.score} ${printer.isTopScorer ? '👍' : ''}`;
+                a.style.textDecoration = "none"; // Remove underline
+                a.style.color = "inherit"; // Ensure link inherits the color of the parent div
+
+                div.appendChild(a);
+                container.appendChild(div);
+            });
+        }
+
+    </script>
+
+</body>
+
+</html>
