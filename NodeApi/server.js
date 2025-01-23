@@ -4,7 +4,8 @@ const mysql = require('mysql2');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
-const WebSocket = require('ws'); // WebSocket-clien
+const WebSocket = require('ws'); // WebSocket-client
+const multer = require('multer'); // File upload
 
 const port = process.env.PORT || 3000;
 
@@ -40,6 +41,8 @@ app.use(session({
     cookie: { secure: false }
 }));
 
+const storage = multer.memoryStorage(); // Store files in memory
+const upload = multer({ storage });
 
 // ------------------ Test API ------------------ //
 
@@ -165,27 +168,49 @@ app.get('/api/printers', (req, res) => {
     });
 });
 
-// app.post('/api/schedule', (req, res) => {
-//     const { printerId, fileName, subject, startTime, endTime, status } = req.body;
+app.post('/api/print_jobs', upload.single('file'), (req, res) => {
+    const {
+        subject,
+        private,
+        discussed,
+        description,
+        weight,
+        length,
+        width,
+        height,
+        printer_id,
+        start_time,
+        end_time,
+        status
+    } = req.body;
 
-//     if (!printerId || !fileName || !subject || !startTime || !endTime || !status) {
-//         return res.status(400).json({ error: 'Missing required fields' });
-//     }
+    const fileData = req.file.buffer; // Binary data of the uploaded file
+    const fileName = req.file.originalname; // Original file name
 
-//     const query = `
-//         INSERT INTO schedule (printer_id, file_name, subject, start_time, end_time, status)
-//         VALUES (?, ?, ?, ?, ?, ?)
-//     `;
+    const query = `
+        INSERT INTO print_jobs 
+        (subject, private, discussed, description, weight, length, width, height, file_name, file_data, printer_id, start_time, end_time, status) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
 
-//     db.query(query, [printerId, fileName, subject, startTime, endTime, status || 'pending'], (err, results) => {
-//         if (err) {
-//             console.error('Error saving the schedule:', err);
-//             return res.status(500).json({ error: 'Could not save the schedule' });
-//         }
+    db.query(
+        query,
+        [subject, private, discussed, description, weight, length, width, height, fileName, fileData, printer_id, start_time, end_time, status],
+        (err, result) => {
+            if (err) {
+                console.error('Error saving print job:', err);
+                return res.status(500).json({ error: 'Error saving print job' });
+            }
 
-//         res.status(200).json({ message: 'Schedule saved successfully', scheduleId: results.insertId });
-//     });
-// });
+            res.status(201).json({
+                message: 'Print job created successfully',
+                jobId: result.insertId
+            });
+        }
+    );
+});
+
+// ------------------ Schedule API ------------------ //
 
 app.post('/api/schedule', (req, res) => {
     const { printerId, fileName, subject, startTime, endTime, status } = req.body;
