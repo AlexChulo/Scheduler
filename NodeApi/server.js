@@ -35,15 +35,27 @@ app.use(cors({
 }));
 
 app.use(session({
-    secret: 'geheim',
+    secret: 'your-secret-key', // Change this to a secure key
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false }
+    cookie: { 
+        secure: false, // Set to true if using HTTPS
+        httpOnly: true, // Prevent client-side JavaScript from accessing the cookie
+        maxAge: 1000 * 60 * 60 * 24 // Session expiration time (1 day)
+    }
 }));
 
+// File upload configuration
 const storage = multer.memoryStorage(); // Store files in memory
 const upload = multer({ storage });
 
+// Middleware to check if the user is logged in
+const requireLogin = (req, res, next) => {
+    if (!req.session.user) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    next();
+};
 // ------------------ Test API ------------------ //
 
 // Test API-endpoint
@@ -60,28 +72,39 @@ app.get('/api/test', (req, res) => {
 
 // ------------------ Login API ------------------ //
 
-// Login API-endpoint
+// Login endpoint
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
 
-    // Zoek de gebruiker in de database
-    const query = 'SELECT * FROM user WHERE username = ? AND password = ?';
+    // Fetch user from the database
+    const query = 'SELECT * FROM users WHERE username = ? AND password = ?';
     db.query(query, [username, password], (err, results) => {
         if (err) {
-            console.error('Error tijdens inloggen:', err);
-            return res.status(500).json({ error: 'Kan niet inloggen' });
+            console.error('Error during login:', err);
+            return res.status(500).json({ error: 'Could not log in' });
         }
 
         if (results.length === 0) {
-            return res.status(401).json({ error: 'Gebruikersnaam of wachtwoord onjuist' });
+            return res.status(401).json({ error: 'Invalid username or password' });
         }
 
-        // Sla de gebruiker op in de sessie
-        req.session.user = results[0];
-        res.status(200).json({ 
-            message: 'Inloggen gelukt',
-            role: results[0].role // Zorg ervoor dat de rol wordt teruggestuurd
-        });
+        const user = results[0];
+
+        // Store user in session
+        req.session.user = { id: user.id, username: user.username };
+        console.log('Session created:', req.session); // Log the session data
+
+        res.status(200).json({ message: 'Login successful', user: req.session.user });
+    });
+});
+// Logout endpoint
+app.post('/api/logout', (req, res) => {
+    req.session.destroy((err) => {
+        if (err) {
+            console.error('Error during logout:', err);
+            return res.status(500).json({ error: 'Could not log out' });
+        }
+        res.status(200).json({ message: 'Logout successful' });
     });
 });
 
@@ -170,6 +193,16 @@ app.get('/api/printers', (req, res) => {
 
 // Submit a Print Job (Initial Submission)
 app.post('/api/print_jobs', upload.single('file'), (req, res) => {
+    // Check if the user is logged in
+    if (!req.session.user) {
+        return res.status(401).json({ error: 'Unauthorized: Please log in' });
+    }
+
+    const userId = req.session.user.id; // Get the user ID from the session
+
+    console.log('Request body:', req.body); // Log the request body
+    console.log('Uploaded file:', req.file); // Log the uploaded file
+
     const {
         subject,
         private,
@@ -192,17 +225,17 @@ app.post('/api/print_jobs', upload.single('file'), (req, res) => {
     // SQL query to insert the print job into the database
     const query = `
         INSERT INTO print_jobs 
-        (subject, private, discussed, description, weight, length, width, height, file_name, file_data) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (subject, private, discussed, description, weight, length, width, height, file_name, file_data, user_id) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     // Execute the query
     db.query(
         query,
-        [subject, private, discussed, description, weight, length, width, height, fileName, fileData],
+        [subject, private, discussed, description, weight, length, width, height, fileName, fileData, userId],
         (err, result) => {
             if (err) {
-                console.error('Error saving print job:', err);
+                console.error('Error saving print job:', err); // Log the error
                 return res.status(500).json({ error: 'Error saving print job' });
             }
 
@@ -214,32 +247,62 @@ app.post('/api/print_jobs', upload.single('file'), (req, res) => {
         }
     );
 });
+
+app.get('/api/print_jobs', requireLogin, (req, res) => {
+    const userId = req.session.user.id;
+
+    const query = 'SELECT * FROM print_jobs WHERE user_id = ?';
+    db.query(query, [userId], (err, results) => {
+        if (err) {
+            console.error('Error fetching print jobs:', err);
+            return res.status(500).json({ error: 'Could not fetch print jobs' });
+        }
+
+        res.status(200).json(results);
+    });
+});
 // ------------------ Schedule API ------------------ //
 
 // POST /api/schedule
 app.post('/api/schedule', (req, res) => {
-    const { printerId, fileName, subject, startTime, endTime, status } = req.body;
+    const { printerId, fileName, subject, startTime, endTime, status, printJobId } = req.body;
 
     console.log('Received Times (UTC):', startTime, endTime); // Debugging
 
-    if (!printerId || !fileName || !subject || !startTime || !endTime || !status) {
+    if (!printerId || !fileName || !subject || !startTime || !endTime || !status || !printJobId) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Save the UTC times directly to the database
-    const query = `
+    // Save the schedule
+    const scheduleQuery = `
         INSERT INTO schedule (printer_id, file_name, subject, start_time, end_time, status)
         VALUES (?, ?, ?, ?, ?, ?)
     `;
 
-    db.query(query, [printerId, fileName, subject, startTime, endTime, status || 'pending'], (err, results) => {
+    db.query(scheduleQuery, [printerId, fileName, subject, startTime, endTime, status || 'pending'], (err, results) => {
         if (err) {
             console.error('Error saving the schedule:', err);
             return res.status(500).json({ error: 'Could not save the schedule' });
         }
 
-        console.log('Saved Times (UTC):', startTime, endTime); // Debugging
-        res.status(200).json({ message: 'Schedule saved successfully', scheduleId: results.insertId });
+        const scheduleId = results.insertId; // Get the ID of the newly created schedule
+
+        // Update the print_job with the schedule_id
+        const updatePrintJobQuery = `
+            UPDATE print_jobs
+            SET schedule_id = ?, printer_id = ?, start_time = ?, end_time = ?
+            WHERE id = ?
+        `;
+
+        db.query(updatePrintJobQuery, [scheduleId, printerId, startTime, endTime, printJobId], (err, results) => {
+            if (err) {
+                console.error('Error updating print job:', err);
+                return res.status(500).json({ error: 'Could not update print job' });
+            }
+
+            console.log('Schedule saved and print job updated:', { scheduleId, printJobId }); // Debugging
+            res.status(200).json({ message: 'Schedule saved successfully', scheduleId });
+        });
     });
 });
 

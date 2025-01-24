@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        .card {
+            margin-bottom: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
+        }
+
+        .card:hover {
+            transform: scale(1.05);
+        }
+
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: bold;
+        }
+
+        .card-text {
+            font-size: 0.9rem;
+            color: #555;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container mt-4">
+        <h1 class="text-center mb-4">My Print Jobs</h1>
+        <div id="printJobsContainer" class="row">
+            <!-- Print job cards will be dynamically inserted here -->
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                // Fetch the user's print jobs from the backend
+                const response = await fetch('http://localhost:3000/api/print_jobs', {
+                    credentials: 'include' // Include cookies in the request
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to fetch print jobs');
+                }
+
+                const printJobs = await response.json();
+                const container = document.getElementById('printJobsContainer');
+
+                // Clear the container
+                container.innerHTML = '';
+
+                // Display each print job as a card
+                printJobs.forEach(job => {
+                    const card = `
+                        <div class="col-md-4">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h5 class="card-title">${job.subject}</h5>
+                                    <p class="card-text"><strong>Description:</strong> ${job.description}</p>
+                                    <p class="card-text"><strong>Weight:</strong> ${job.weight} grams</p>
+                                    <p class="card-text"><strong>Dimensions:</strong> ${job.length}mm x ${job.width}mm x ${job.height}mm</p>
+                                    <p class="card-text"><strong>Status:</strong> ${job.status || 'Pending'}</p>
+                                    <p class="card-text"><small class="text-muted">Created on: ${new Date(job.created_at).toLocaleDateString()}</small></p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    container.insertAdjacentHTML('beforeend', card);
+                });
+            } catch (error) {
+                console.error('Error fetching print jobs:', error);
+                alert(`Error: ${error.message}`);
+            }
+        });
+    </script>
+</body>
+
+</html>
