@@ -6,9 +6,8 @@
     <title>3D Print Job Submission</title>
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://threejs.org/examples/js/loaders/STLLoader.js"></script>
-<script src="https://threejs.org/examples/js/loaders/OBJLoader.js"></script>
-
+    <script src="https://threejs.org/examples/js/loaders/STLLoader.js"></script>
+    <script src="https://threejs.org/examples/js/loaders/OBJLoader.js"></script>
 </head>
 <body>
     <div class="container mt-5">
@@ -16,7 +15,7 @@
         <div class="main p-3 d-flex justify-content-center" style="align-items: center; text-align: center;">
             <div class="upload-form">
                 <h3 class="upload-title mb-4">Upload Form</h3>
-                <form id="printForm" action="recommendations.html" method="GET">
+                <form id="printForm">
                     <!-- File Upload -->
                     <div class="form-group mb-4">
                         <label for="file">Upload STL File:</label>
@@ -25,32 +24,32 @@
                     
                     <!-- Subject -->
                     <div class="form-group mb-4">
-                        <input type="text" class="form-control" id="subject" name="subject" placeholder="Onderwerp">
+                        <input type="text" class="form-control" id="subject" name="subject" placeholder="Onderwerp" required>
                     </div>
 
                     <!-- Private Assignment -->
                     <div class="form-group mb-4">
                         <label for="private">Prive opdracht?</label>
-                        <select class="form-select" id="private" name="private">
+                        <select class="form-select" id="private" name="private" required>
                             <option value="" disabled selected>Choose an option</option>
                             <option value="1">Ja</option>
-                            <option value="2">Nee</option>
+                            <option value="0">Nee</option>
                         </select>
                     </div>
 
                     <!-- Discussed with Teacher -->
                     <div class="form-group mb-4">
                         <label for="discussed">Besproken met de docent?</label>
-                        <select class="form-select" id="discussed" name="discussed">
+                        <select class="form-select" id="discussed" name="discussed" required>
                             <option value="" disabled selected>Choose an option</option>
                             <option value="1">Ja</option>
-                            <option value="2">Nee</option>
+                            <option value="0">Nee</option>
                         </select>
                     </div>
 
                     <!-- Description -->
                     <div class="form-group mb-4">
-                        <textarea class="form-control" id="description" name="description" rows="5" placeholder="Omschrijving"></textarea>
+                        <textarea class="form-control" id="description" name="description" rows="5" placeholder="Omschrijving" required></textarea>
                     </div>
 
                     <!-- Weight -->
@@ -77,19 +76,51 @@
     </div>
 
     <script>
-        function redirectToRecommendationsPage() {
-            const form = document.getElementById("printForm");
+        document.getElementById('printForm').addEventListener('submit', async (event) => {
+            event.preventDefault(); // Prevent the default form submission
+
+            // Get form data
+            const form = document.getElementById('printForm');
             const formData = new FormData(form);
-            const params = new URLSearchParams();
 
-            // Add all form fields to query parameters
-            formData.forEach((value, key) => {
-                params.append(key, value);
-            });
+            // Validate required fields
+            const requiredFields = ['file', 'subject', 'private', 'discussed', 'description', 'weight', 'length', 'width', 'height'];
+            for (const field of requiredFields) {
+                if (!formData.get(field)) {
+                    alert(`Please fill out the ${field} field.`);
+                    return;
+                }
+            }
 
-            // Redirect to recommendations.html with query string
-            window.location.href = `recommendations.html?${params.toString()}`;
-        }
+            // Validate file type
+            const file = formData.get('file');
+            const allowedFileTypes = ['.stl', '.obj'];
+            const fileExtension = file.name.split('.').pop().toLowerCase();
+            if (!allowedFileTypes.includes(`.${fileExtension}`)) {
+                alert('Invalid file type. Only .stl and .obj files are allowed.');
+                return;
+            }
+
+            try {
+                // Send the form data to the API
+                const response = await fetch('http://localhost:3000/api/print_jobs', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to submit print job');
+                }
+
+                const result = await response.json();
+                console.log('Print job created:', result);
+                window.location.href = 'recommendations.html';
+            } catch (error) {
+                console.error('Error submitting print job:', error);
+                alert(`Error: ${error.message}`);
+            }
+        });
     </script>
 </body>
 </html>

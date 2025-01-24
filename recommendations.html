@@ -21,60 +21,91 @@
     </div>
 
     <script>
-        // Function to parse query parameters from the URL
-        function getQueryParams() {
-            const urlParams = new URLSearchParams(window.location.search);
-            return {
-                subject: urlParams.get("subject") || "",
-                weight: parseFloat(urlParams.get("weight")) || 0,
-                length: parseFloat(urlParams.get("length")) || 0,
-                width: parseFloat(urlParams.get("width")) || 0,
-                height: parseFloat(urlParams.get("height")) || 0,
-            };
+        // Fetch the latest print job from the database
+        async function fetchLatestPrintJob() {
+            try {
+                const response = await fetch('http://localhost:3000/api/print_jobs/latest');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch latest print job');
+                }
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error('Error fetching latest print job:', error);
+                return null;
+            }
         }
 
         // Fetch printer data from the Node.js API
-        fetch('http://localhost:3000/api/printers')
-            .then(response => response.json())
-            .then(printers => {
-                // Get user inputs from query parameters
-                const userInput = getQueryParams();
+        async function fetchPrinters() {
+            try {
+                const response = await fetch('http://localhost:3000/api/printers');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch printers');
+                }
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error('Error fetching printers:', error);
+                return [];
+            }
+        }
 
-                const recommendations = printers.map(printer => {
-                    let score = 0;
+        // Main function to load data and display recommendations
+        async function loadRecommendations() {
+            // Fetch the latest print job and printer data
+            const [printJob, printers] = await Promise.all([
+                fetchLatestPrintJob(),
+                fetchPrinters()
+            ]);
 
-                    // Dynamic scoring logic based on user inputs and printer data
-                    if (printer.speed === "fast") score += 2; // Example scoring for speed
-                    if (printer.speed === "normal") score += 1; // Example scoring for speed
-                    if (printer.weight_capacity >= userInput.weight) score += 2;
-                    if (
-                        printer.max_depth >= userInput.length &&
-                        printer.max_width >= userInput.width &&
-                        printer.max_height >= userInput.height
-                    ) {
-                        score += 3;
+            if (!printJob) {
+                alert('No print job found. Please submit a print job first.');
+                return;
+            }
 
-                        const sizeDifference =
-                            (printer.max_depth - userInput.length) +
-                            (printer.max_width - userInput.width) +
-                            (printer.max_height - userInput.height);
+            const userInput = {
+                subject: printJob.subject,
+                weight: printJob.weight,
+                length: printJob.length,
+                width: printJob.width,
+                height: printJob.height
+            };
 
-                        // Smaller sizeDifference means a higher bonus
-                        score += Math.max(1, 3 - sizeDifference / 100); // Scale the bonus dynamically
-                    }
+            // Calculate recommendations
+            const recommendations = printers.map(printer => {
+                let score = 0;
 
-                    return { ...printer, score };
-                }).sort((a, b) => b.score - a.score); // Sort by score
-                if (recommendations.length > 0) {
-                    recommendations[0].isTopScorer = true;
+                // Dynamic scoring logic based on user inputs and printer data
+                if (printer.speed === "fast") score += 2; // Example scoring for speed
+                if (printer.speed === "normal") score += 1; // Example scoring for speed
+                if (printer.weight_capacity >= userInput.weight) score += 2;
+                if (
+                    printer.max_depth >= userInput.length &&
+                    printer.max_width >= userInput.width &&
+                    printer.max_height >= userInput.height
+                ) {
+                    score += 3;
 
+                    const sizeDifference =
+                        (printer.max_depth - userInput.length) +
+                        (printer.max_width - userInput.width) +
+                        (printer.max_height - userInput.height);
+
+                    // Smaller sizeDifference means a higher bonus
+                    score += Math.max(1, 3 - sizeDifference / 100); // Scale the bonus dynamically
                 }
 
+                return { ...printer, score };
+            }).sort((a, b) => b.score - a.score); // Sort by score
 
+            if (recommendations.length > 0) {
+                recommendations[0].isTopScorer = true;
+            }
 
-                displayRecommendations(recommendations, userInput);
-            })
-            .catch(error => console.error('Error fetching printers:', error));
+            // Display recommendations
+            displayRecommendations(recommendations, userInput);
+        }
 
         function displayRecommendations(recommendations, userInput) {
             const container = document.getElementById("recommendations");
@@ -82,8 +113,8 @@
 
             recommendations.forEach(printer => {
                 if (
-                    printer.max_depth < userInput.length,
-                    printer.max_width < userInput.width ,
+                    printer.max_depth < userInput.length ||
+                    printer.max_width < userInput.width ||
                     printer.max_height < userInput.height
                 ) {
                     return; // Skip printing this printer, as it is too small
@@ -101,6 +132,8 @@
             });
         }
 
+        // Load recommendations when the page loads
+        loadRecommendations();
     </script>
 
 </body>

@@ -168,6 +168,7 @@ app.get('/api/printers', (req, res) => {
     });
 });
 
+// Submit a Print Job (Initial Submission)
 app.post('/api/print_jobs', upload.single('file'), (req, res) => {
     const {
         subject,
@@ -177,31 +178,35 @@ app.post('/api/print_jobs', upload.single('file'), (req, res) => {
         weight,
         length,
         width,
-        height,
-        printer_id,
-        start_time,
-        end_time,
-        status
+        height
     } = req.body;
 
     const fileData = req.file.buffer; // Binary data of the uploaded file
     const fileName = req.file.originalname; // Original file name
 
+    // Validate required fields
+    if (!subject || !fileData || !weight || !length || !width || !height) {
+        return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // SQL query to insert the print job into the database
     const query = `
         INSERT INTO print_jobs 
-        (subject, private, discussed, description, weight, length, width, height, file_name, file_data, printer_id, start_time, end_time, status) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (subject, private, discussed, description, weight, length, width, height, file_name, file_data) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
+    // Execute the query
     db.query(
         query,
-        [subject, private, discussed, description, weight, length, width, height, fileName, fileData, printer_id, start_time, end_time, status],
+        [subject, private, discussed, description, weight, length, width, height, fileName, fileData],
         (err, result) => {
             if (err) {
                 console.error('Error saving print job:', err);
                 return res.status(500).json({ error: 'Error saving print job' });
             }
 
+            // Return success response
             res.status(201).json({
                 message: 'Print job created successfully',
                 jobId: result.insertId
@@ -209,42 +214,41 @@ app.post('/api/print_jobs', upload.single('file'), (req, res) => {
         }
     );
 });
-
 // ------------------ Schedule API ------------------ //
 
+// POST /api/schedule
 app.post('/api/schedule', (req, res) => {
     const { printerId, fileName, subject, startTime, endTime, status } = req.body;
+
+    console.log('Received Times (UTC):', startTime, endTime); // Debugging
 
     if (!printerId || !fileName || !subject || !startTime || !endTime || !status) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const start_time_utc = new Date(startTime).toISOString(); // Convert to UTC
-    const end_time_utc = new Date(endTime).toISOString();
-
+    // Save the UTC times directly to the database
     const query = `
         INSERT INTO schedule (printer_id, file_name, subject, start_time, end_time, status)
         VALUES (?, ?, ?, ?, ?, ?)
     `;
 
-    db.query(query, [printerId, fileName, subject, start_time_utc, end_time_utc, status || 'pending'], (err, results) => {
+    db.query(query, [printerId, fileName, subject, startTime, endTime, status || 'pending'], (err, results) => {
         if (err) {
             console.error('Error saving the schedule:', err);
             return res.status(500).json({ error: 'Could not save the schedule' });
         }
 
+        console.log('Saved Times (UTC):', startTime, endTime); // Debugging
         res.status(200).json({ message: 'Schedule saved successfully', scheduleId: results.insertId });
     });
 });
 
-
-
-// Fetch events for a specific printer
+// GET /api/schedule/:printerId
 app.get('/api/schedule/:printerId', (req, res) => {
     const printerId = req.params.printerId;
 
     const query = `
-        SELECT file_name, subject, start_time, end_time , status
+        SELECT file_name, subject, start_time, end_time, status
         FROM schedule 
         WHERE printer_id = ?
     `;
@@ -255,18 +259,60 @@ app.get('/api/schedule/:printerId', (req, res) => {
             return res.status(500).json({ error: 'Could not fetch schedule data' });
         }
 
+        console.log('Fetched Times (UTC):', results); // Debugging
+
         // Return the events in the format FullCalendar expects
         const events = results.map(event => ({
             file_name: event.file_name,
             subject: event.subject,
-            start_time:  new Date(event.start_time).toISOString(),
-            end_time: new Date(event.end_time).toISOString(),
+            start_time: event.start_time, // UTC time
+            end_time: event.end_time // UTC time
         }));
-        
 
         res.status(200).json(events);
     });
+});
 
+// GET /api/print_jobs/latest
+app.get('/api/print_jobs/latest', (req, res) => {
+    const query = `SELECT * FROM print_jobs ORDER BY created_at DESC LIMIT 1`;
+
+    db.query(query, (err, results) => {
+        if (err) {
+            console.error('Error fetching latest print job:', err);
+            return res.status(500).json({ error: 'Error fetching latest print job' });
+        }
+
+        if (results.length === 0) {
+            return res.status(404).json({ error: 'No print jobs found' });
+        }
+
+        res.status(200).json(results[0]);
+    });
+});
+// GET /api/print_jobs/:printerId
+app.get('/api/print_jobs/:printerId', (req, res) => {
+    const printerId = req.params.printerId;
+
+    const query = `
+        SELECT subject
+        FROM print_jobs
+        WHERE printer_id = ?
+    `;
+
+    db.query(query, [printerId], (err, results) => {
+        if (err) {
+            console.error('Error fetching print job:', err);
+            return res.status(500).json({ error: 'Could not fetch print job' });
+        }
+
+        if (results.length === 0) {
+            return res.status(404).json({ error: 'Print job not found' });
+        }
+
+        const printJob = results[0];
+        res.status(200).json(printJob);
+    });
 });
 
 

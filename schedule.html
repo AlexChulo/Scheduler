@@ -15,26 +15,20 @@
         <div id="calendar" class="mt-4"></div>
     </div>
 
-    <!-- Modal for entering time range -->
+    <!-- Modal for confirming time slot -->
     <div class="modal fade" id="timeRangeModal" tabindex="-1" aria-labelledby="timeRangeModalLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="timeRangeModalLabel">Enter Details</h5>
+                    <h5 class="modal-title" id="timeRangeModalLabel">Confirm Time Slot</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <form id="timeRangeForm">
-                        <div class="mb-3">
-                            <label for="subject" class="form-label">Subject</label>
-                            <input type="text" class="form-control" id="subject" placeholder="Enter subject" required>
-                        </div>
-                        <p id="selectedTimeRange" class="text-muted"></p>
-                    </form>
+                    <p id="selectedTimeRange" class="text-muted"></p>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="saveTimeRange">Save</button>
+                    <button type="button" class="btn btn-primary" id="saveTimeRange">Confirm</button>
                 </div>
             </div>
         </div>
@@ -44,88 +38,100 @@
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar/main.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const printerId = urlParams.get('id');
-            const printerName = urlParams.get('name');
+    const urlParams = new URLSearchParams(window.location.search);
+    const printerId = urlParams.get('id');
+    const printerName = urlParams.get('name');
 
-            if (printerName) {
-                document.title = `Schedule Print - ${printerName}`;
-                document.getElementById('pageHeading').innerText = `Schedule Print - ${printerName}`;
-            }
+    if (printerName) {
+        document.title = `Schedule Print - ${printerName}`;
+        document.getElementById('pageHeading').innerText = `Schedule Print - ${printerName}`;
+    }
 
-            const calendarEl = document.getElementById('calendar');
-            const calendar = new FullCalendar.Calendar(calendarEl, {
-                initialView: 'timeGridWeek',
-                timeZone: 'local',
-                selectable: true,
-                events: function (fetchInfo, successCallback, failureCallback) {
-                    fetch(`http://localhost:3000/api/schedule/${printerId}`)
-                        .then(response => response.json())
-                        .then(data => {
-                            const events = data.map(event => {
-                                const startTime = new Date(event.start_time);
-                                const endTime = new Date(event.end_time);
-                                return {
-                                    title: event.file_name,
-                                    start: startTime,
-                                    end: endTime,
-                                    description: event.subject
-                                };
-                            });
-                            successCallback(events);
-                        })
-                        .catch(error => {
-                            console.error('Error fetching events:', error);
-                            failureCallback(error);
-                        });
-                },
-                select: function (info) {
-                    console.log('Select callback triggered'); // Debugging
+    const calendarEl = document.getElementById('calendar');
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'timeGridWeek',
+        timeZone: 'local', // Ensure FullCalendar uses the local timezone
+        selectable: true,
+        events: function (fetchInfo, successCallback, failureCallback) {
+            fetch(`http://localhost:3000/api/schedule/${printerId}`)
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Events received from backend:', data); // Debugging
 
-                    // Format the times to display in LOCAL time
-                    const startTimeLocal = info.start.toLocaleString('en-US', {
-                        weekday: 'short',
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit'
+                    const events = data.map(event => {
+                        // Convert UTC times from the backend to local time
+                        const startTime = new Date(event.start_time);
+                        const endTime = new Date(event.end_time);
+
+                        console.log('Event start (UTC):', event.start_time, 'Local:', startTime.toString()); // Debugging
+                        console.log('Event end (UTC):', event.end_time, 'Local:', endTime.toString()); // Debugging
+
+                        return {
+                            title: event.file_name,
+                            start: startTime, // FullCalendar will handle the conversion to local time
+                            end: endTime,
+                            description: event.subject
+                        };
                     });
 
-                    const endTimeLocal = info.end.toLocaleString('en-US', {
-                        weekday: 'short',
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                    });
+                    successCallback(events);
+                })
+                .catch(error => {
+                    console.error('Error fetching events:', error);
+                    failureCallback(error);
+                });
+        },
+        select: function (info) {
+            console.log('Select callback triggered'); // Debugging
 
-                    // Display the selected time range in the modal
-                    document.getElementById('selectedTimeRange').innerText = `Selected Time: ${startTimeLocal} - ${endTimeLocal}`;
+            // Format the times to display in LOCAL time
+            const startTimeLocal = info.start.toLocaleString('en-US', {
+                weekday: 'short',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
 
-                    // Show the modal
-                    const timeRangeModal = new bootstrap.Modal(document.getElementById('timeRangeModal'));
-                    timeRangeModal.show();
+            const endTimeLocal = info.end.toLocaleString('en-US', {
+                weekday: 'short',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
 
-                    // Save event on modal save
-                    document.getElementById('saveTimeRange').onclick = function () {
-                        const subject = document.getElementById('subject').value;
-                        if (!subject) {
-                            alert('Please enter a subject.');
-                            return;
-                        }
+            // Display the selected time range in the modal
+            document.getElementById('selectedTimeRange').innerText = `Selected Time: ${startTimeLocal} - ${endTimeLocal}`;
+
+            // Show the modal
+            const timeRangeModal = new bootstrap.Modal(document.getElementById('timeRangeModal'));
+            timeRangeModal.show();
+
+            // Save event on modal save
+            document.getElementById('saveTimeRange').onclick = function () {
+                // Fetch the subject from the print_jobs table
+                fetch(`http://localhost:3000/api/print_jobs/latest`)
+                    .then(response => response.json())
+                    .then(printJob => {
+                        const subject = printJob.subject; // Get the subject from the latest print job
 
                         // Convert the selected time to UTC before sending it to the server
-                        const startTimeUTC = info.start.toISOString();
-                        const endTimeUTC = info.end.toISOString();
+                        const startTimeUTC = new Date(info.start.getTime() - (info.start.getTimezoneOffset() * 60000)).toISOString();
+            const endTimeUTC = new Date(info.end.getTime() - (info.end.getTimezoneOffset() * 60000)).toISOString();
+
+            console.log('Selected Time (Local):', info.start.toString(), info.end.toString()); // Debugging
+            console.log('Selected Time (UTC):', startTimeUTC, endTimeUTC); // Debugging
+            console.log('Subject from print_jobs:', subject); // Debugging
 
                         fetch('http://localhost:3000/api/schedule', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 printerId: printerId,
-                                fileName: `Printer ${printerId} - ${subject}`,
+                                fileName: `Print Job - ${subject}`, // Simplified file name
                                 subject: subject,
                                 startTime: startTimeUTC,
                                 endTime: endTimeUTC,
@@ -141,13 +147,17 @@
                             .catch(error => {
                                 console.error('Error saving schedule:', error);
                             });
-                    };
-                },
-                editable: false // Prevent dragging of events
-            });
+                    })
+                    .catch(error => {
+                        console.error('Error fetching print job:', error);
+                    });
+            };
+        },
+        editable: false // Prevent dragging of events
+    });
 
-            calendar.render();
-        });
+    calendar.render();
+});
     </script>
 </body>
 
