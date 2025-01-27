@@ -6,9 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D Print Job Submission</title>
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://threejs.org/examples/js/loaders/STLLoader.js"></script>
-    <script src="https://threejs.org/examples/js/loaders/OBJLoader.js"></script>
 </head>
 
 <body>
@@ -20,8 +17,8 @@
                 <form id="printForm">
                     <!-- File Upload -->
                     <div class="form-group mb-4">
-                        <label for="file">Upload STL File:</label>
-                        <input type="file" class="form-control" id="file" name="file" accept=".stl, .obj" required>
+                        <label for="file">Upload G-code File:</label>
+                        <input type="file" class="form-control" id="file" name="file" accept=".gcode" required>
                     </div>
 
                     <!-- Subject -->
@@ -56,26 +53,6 @@
                             placeholder="Omschrijving" required></textarea>
                     </div>
 
-                    <!-- Weight -->
-                    <div class="form-group mb-4">
-                        <label for="weight">Weight (grams):</label>
-                        <input type="number" class="form-control" id="weight" name="weight" placeholder="Enter weight"
-                            required>
-                    </div>
-
-                    <!-- Dimensions -->
-                    <div class="form-group mb-4">
-                        <label for="dimensions">Dimensions (L x W x H in mm):</label>
-                        <div class="d-flex">
-                            <input type="number" id="length" name="length" class="form-control mr-2"
-                                placeholder="Length" required>
-                            <input type="number" id="width" name="width" class="form-control mr-2" placeholder="Width"
-                                required>
-                            <input type="number" id="height" name="height" class="form-control" placeholder="Height"
-                                required>
-                        </div>
-                    </div>
-
                     <!-- Submit Button -->
                     <button type="submit" class="btn btn-primary">Submit</button>
                 </form>
@@ -85,56 +62,38 @@
 
     <script>
         document.getElementById('printForm').addEventListener('submit', async (event) => {
-    event.preventDefault(); // Prevent the default form submission
+            event.preventDefault(); // Prevent the default form submission
 
-    // Get form data
-    const form = document.getElementById('printForm');
-    const formData = new FormData(form);
+            // Get form data
+            const form = document.getElementById('printForm');
+            const formData = new FormData(form);
 
-    // Log form data for debugging
-    for (const [key, value] of formData.entries()) {
-        console.log(key, value);
-    }
+            // Log form data for debugging
+            for (const [key, value] of formData.entries()) {
+                console.log(key, value);
+            }
 
-    // Validate required fields
-    const requiredFields = ['file', 'subject', 'private', 'discussed', 'description', 'weight', 'length', 'width', 'height'];
-    for (const field of requiredFields) {
-        if (!formData.get(field)) {
-            alert(`Please fill out the ${field} field.`);
-            return;
-        }
-    }
+            try {
+                // Send the form data to the API
+                const response = await fetch('http://localhost:3000/api/print_jobs', {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'include' // Include cookies in the request
+                });
 
-    // Validate file type
-    const file = formData.get('file');
-    const allowedFileTypes = ['.stl', '.obj'];
-    const fileExtension = file.name.split('.').pop().toLowerCase();
-    if (!allowedFileTypes.includes(`.${fileExtension}`)) {
-        alert('Invalid file type. Only .stl and .obj files are allowed.');
-        return;
-    }
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to submit print job');
+                }
 
-    try {
-        // Send the form data to the API
-        const response = await fetch('http://localhost:3000/api/print_jobs', {
-            method: 'POST',
-            body: formData,
-            credentials: 'include' // Include cookies in the request
+                const result = await response.json();
+                console.log('Print job created:', result);
+                window.location.href = 'recommendations.html'; // Redirect on success
+            } catch (error) {
+                console.error('Error submitting print job:', error);
+                alert(`Error: ${error.message}`);
+            }
         });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Failed to submit print job');
-        }
-
-        const result = await response.json();
-        console.log('Print job created:', result);
-        window.location.href = 'recommendations.html';
-    } catch (error) {
-        console.error('Error submitting print job:', error);
-        alert(`Error: ${error.message}`);
-    }
-});
     </script>
 </body>
 

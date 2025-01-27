@@ -6,6 +6,8 @@ const nodemailer = require('nodemailer');
 const cors = require('cors');
 const WebSocket = require('ws'); // WebSocket-client
 const multer = require('multer'); // File upload
+const fs = require('fs');
+const readline = require('readline');
 
 const port = process.env.PORT || 3000;
 
@@ -192,14 +194,13 @@ app.get('/api/printers', (req, res) => {
 });
 
 // Submit a Print Job (Initial Submission)
-app.post('/api/print_jobs', upload.single('file'), (req, res) => {
+app.post('/api/print_jobs', upload.single('file'), async (req, res) => {
     // Check if the user is logged in
     if (!req.session.user) {
         return res.status(401).json({ error: 'Unauthorized: Please log in' });
     }
 
     const userId = req.session.user.id; // Get the user ID from the session
-
     console.log('Request body:', req.body); // Log the request body
     console.log('Uploaded file:', req.file); // Log the uploaded file
 
@@ -207,32 +208,105 @@ app.post('/api/print_jobs', upload.single('file'), (req, res) => {
         subject,
         private,
         discussed,
-        description,
-        weight,
-        length,
-        width,
-        height
+        description
     } = req.body;
 
     const fileData = req.file.buffer; // Binary data of the uploaded file
     const fileName = req.file.originalname; // Original file name
 
     // Validate required fields
-    if (!subject || !fileData || !weight || !length || !width || !height) {
+    if (!subject || !fileData) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
+
+    // Initialize extracted values
+    let weight = 0;
+    let length = 0;
+    let width = 0;
+    let height = 0;
+    let estimatedTime = 0;
+
+    try {
+        const fileContent = req.file.buffer.toString('utf8');
+        const lines = fileContent.split('\n');
+    
+        let xMin = Number.MAX_VALUE, xMax = Number.MIN_VALUE;
+        let yMin = Number.MAX_VALUE, yMax = Number.MIN_VALUE;
+        let zMin = Number.MAX_VALUE, zMax = Number.MIN_VALUE;
+    
+        for (const line of lines) {
+            // Extract estimated printing time
+            if (line.startsWith('; estimated printing time (normal mode) =')) {
+                const timeMatch = line.match(/; estimated printing time \(normal mode\) = (\d+m \d+s)/);
+                if (timeMatch) {
+                    const timeParts = timeMatch[1].split(/m|s/).filter(Boolean);
+                    estimatedTime = parseInt(timeParts[0]) * 60 + parseInt(timeParts[1]);
+                }
+            }
+        
+            // Extract filament used in grams
+            if (line.startsWith('; total filament used [g] =')) {
+                const weightMatch = line.match(/; total filament used \[g\] = ([\d.]+)/);
+                if (weightMatch) weight = parseFloat(weightMatch[1]);
+            }
+        
+            // Log the line being processed
+            console.log('Processing line:', line);
+        
+            // Extract dimensions from movement commands
+            const movementMatch = line.match(/G[01]\s+.*?(?:X([\d.]+))?\s*(?:Y([\d.]+))?\s*(?:Z([\d.]+))?/);
+            if (movementMatch) {
+                const x = movementMatch[1] ? parseFloat(movementMatch[1]) : xMax;
+                const y = movementMatch[2] ? parseFloat(movementMatch[2]) : yMax;
+                const z = movementMatch[3] ? parseFloat(movementMatch[3]) : zMax;
+        
+                // Log the extracted values
+                console.log('Extracted values:', { x, y, z });
+        
+                xMin = Math.min(xMin, x);
+                xMax = Math.max(xMax, x);
+                yMin = Math.min(yMin, y);
+                yMax = Math.max(yMax, y);
+                zMin = Math.min(zMin, z);
+                zMax = Math.max(zMax, z);
+        
+                // Log width calculation as it's being determined
+                const currentWidth = yMax - yMin;
+                console.log(`Current width calculation: yMax=${yMax}, yMin=${yMin}, width=${currentWidth}`);
+            }
+        }
+
+    
+        // Calculate dimensions
+        length = xMax - xMin;
+        width = yMax - yMin;
+        height = zMax - zMin;
+    
+        // Round to two decimal places
+        weight = parseFloat(weight.toFixed(2));
+        length = parseFloat(length.toFixed(2));
+        width = parseFloat(width.toFixed(2));
+        height = parseFloat(height.toFixed(2));
+    
+        console.log('Final values:', { weight, length, width, height, estimatedTime });
+    
+    } catch (error) {
+        console.error('Error parsing G-code file:', error);
+        return res.status(500).json({ error: 'Error processing G-code file' });
+    }
+    
 
     // SQL query to insert the print job into the database
     const query = `
         INSERT INTO print_jobs 
-        (subject, private, discussed, description, weight, length, width, height, file_name, file_data, user_id) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (subject, private, discussed, description, weight, length, width, height, estimated_time, file_name, file_data, user_id) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     // Execute the query
     db.query(
         query,
-        [subject, private, discussed, description, weight, length, width, height, fileName, fileData, userId],
+        [subject, private, discussed, description, weight, length, width, height, estimatedTime, fileName, fileData, userId],
         (err, result) => {
             if (err) {
                 console.error('Error saving print job:', err); // Log the error
@@ -242,11 +316,15 @@ app.post('/api/print_jobs', upload.single('file'), (req, res) => {
             // Return success response
             res.status(201).json({
                 message: 'Print job created successfully',
-                jobId: result.insertId
+                jobId: result.insertId,
+                dimensions: { length, width, height },
+                estimatedTime,
+                weight
             });
         }
     );
 });
+
 
 app.get('/api/print_jobs', requireLogin, (req, res) => {
     const userId = req.session.user.id;
